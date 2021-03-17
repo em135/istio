@@ -18,6 +18,17 @@ require 'webrick'
 require 'json'
 require 'net/http'
 
+require 'opentelemetry-sdk'
+require 'opentelemetry-propagator-b3'
+require 'opentelemetry-exporter-otlp'
+
+OpenTelemetry::SDK.configure do |c|
+    c.http_extractors = [OpenTelemetry::Propagator::B3::Single.rack_extractor, OpenTelemetry::Propagator::B3::Multi.rack_extractor]
+    c.http_injectors = [OpenTelemetry::Propagator::B3::Single.rack_injector]
+    c.text_map_extractors = [OpenTelemetry::Propagator::B3::Single.text_map_extractor, OpenTelemetry::Propagator::B3::Multi.text_map_extractor]
+    c.text_map_injectors = [OpenTelemetry::Propagator::B3::Single.text_map_injector]
+end
+ 
 if ARGV.length < 1 then
     puts "usage: #{$PROGRAM_NAME} port"
     exit(-1)
@@ -37,7 +48,7 @@ end
 
 server.mount_proc '/details' do |req, res|
     pathParts = req.path.split('/')
-    headers = get_forward_headers(req)
+    headers = req.header
 
     begin
         begin
@@ -125,65 +136,6 @@ def get_isbn(book, isbn_type)
   end
 
   return isbn_dentifiers[0]['identifier']
-end
-
-def get_forward_headers(request)
-  headers = {}
-
-  # Keep this in sync with the headers in productpage and reviews.
-  incoming_headers = [
-      # All applications should propagate x-request-id. This header is
-      # included in access log statements and is used for consistent trace
-      # sampling and log sampling decisions in Istio.
-      'x-request-id',
-
-      # Lightstep tracing header. Propagate this if you use lightstep tracing
-      # in Istio (see
-      # https://istio.io/latest/docs/tasks/observability/distributed-tracing/lightstep/)
-      # Note: this should probably be changed to use B3 or W3C TRACE_CONTEXT.
-      # Lightstep recommends using B3 or TRACE_CONTEXT and most application
-      # libraries from lightstep do not support x-ot-span-context.
-      'x-ot-span-context',
-
-      # Datadog tracing header. Propagate these headers if you use Datadog
-      # tracing.
-      'x-datadog-trace-id',
-      'x-datadog-parent-id',
-      'x-datadog-sampling-priority',
-
-      # W3C Trace Context. Compatible with OpenCensusAgent and Stackdriver Istio
-      # configurations.
-      'traceparent',
-      'tracestate',
-
-      # Cloud trace context. Compatible with OpenCensusAgent and Stackdriver Istio
-      # configurations.
-      'x-cloud-trace-context',
-
-      # Grpc binary trace context. Compatible with OpenCensusAgent nad
-      # Stackdriver Istio configurations.
-      'grpc-trace-bin',
-
-      # b3 trace headers. Compatible with Zipkin, OpenCensusAgent, and
-      # Stackdriver Istio configurations.
-      'x-b3-traceid',
-      'x-b3-spanid',
-      'x-b3-parentspanid',
-      'x-b3-sampled',
-      'x-b3-flags',
-
-      # Application-specific headers to forward.
-      'end-user',
-      'user-agent',
-  ]
-
-  request.each do |header, value|
-    if incoming_headers.include? header then
-      headers[header] = value
-    end
-  end
-
-  return headers
 end
 
 server.start

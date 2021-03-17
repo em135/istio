@@ -24,4 +24,8 @@ ENV ENABLE_EXTERNAL_BOOK_SERVICE ${enable_external_book_service:-false}
 EXPOSE 9080
 WORKDIR /opt/microservices
 
+RUN gem install opentelemetry-sdk
+RUN gem install opentelemetry-propagator-b3
+RUN gem install opentelemetry-exporter-otlp
+
 CMD ["ruby", "details.rb", "9080"]
